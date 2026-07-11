@@ -65,9 +65,13 @@ team(s) they manage.
 assigned to their team, including its description, reference identifier,
 scoped product/system, and current status.
 - FR-15: The Team Manager SHALL be able to submit evidence against a control
-assigned to their team. Evidence SHALL support at least: file/document
-attachments (e.g. screenshots, policy documents, exported logs) and a free
-text note describing how the evidence satisfies the control.
+assigned to their team. Evidence SHALL support at least: image uploads (e.g.
+screenshots, photos of physical controls, exported log/report captures) and a
+free text note describing how the evidence satisfies the control.
+- FR-15a: Every image uploaded as evidence SHALL be durably persisted by the
+system and SHALL remain retrievable (for viewing/download by the Compliance
+Admin, the submitting Team Manager's team, and the assigned Auditor) for as
+long as the associated control record exists.
 - FR-16: The Team Manager SHALL be able to view the status and any reviewer
 feedback for controls their team has submitted evidence for.
 - FR-17: The Team Manager SHALL be able to re-submit or add additional
@@ -101,6 +105,14 @@ for control creation/edits, evidence submissions, and review decisions.
 relevant to them: a Team Manager when their submission is approved or
 rejected, and an Auditor when new evidence is submitted for a control they
 must review.
+- FR-26a: Whenever a user action is required from someone to move a control
+forward, the system SHALL send that person an email notification prompting
+the action, including at minimum: a Team Manager when a control is newly
+assigned to their team (action needed: submit evidence) or when evidence
+they submitted is rejected (action needed: re-submit), and an Auditor when
+evidence is submitted or re-submitted for a control assigned to them
+(action needed: review). The email SHALL identify the control and link to
+the relevant view in the application.
 - FR-27: The system SHALL present one single-page web application whose
 navigation, views, and available actions adapt to the signed-in user's
 role, rather than separate applications per role.
@@ -127,6 +139,10 @@ manual filtering.
 - NFR-6 (Traceability): Every control SHALL be traceable to its originating
 compliance framework reference (e.g. specific ISO 27001 clause or SOC2
 criterion).
+- NFR-7 (Evidence storage durability): Uploaded evidence images SHALL be
+stored in persistent, durable storage (not local/ephemeral compute storage)
+so that they survive application restarts/redeploys and remain accessible
+for the life of the audit engagement.
 
 ## 5. Out of Scope
 
