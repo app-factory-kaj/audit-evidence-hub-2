@@ -1,0 +1,399 @@
+openapi: 3.0.3
+info:
+  title: Audit Hub API
+  version: 0.1.0
+  description: >
+    Backend for the Audit Evidence Hub: controls, evidence submissions,
+    evidence images, review decisions, and audit trail.
+servers:
+  - url: /
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: service is healthy
+
+  /controls:
+    get:
+      operationId: listControls
+      summary: List controls visible to the caller (role-scoped)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [not_started, evidence_submitted, approved, rejected] }
+        - name: teamId
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: matching controls
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer }
+                  next: { type: string, nullable: true }
+                  previous: { type: string, nullable: true }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Control' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createControl
+      summary: Create a control (Compliance Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControlInput' }
+      responses:
+        '201':
+          description: control created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Control' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /controls/{controlId}:
+    parameters:
+      - name: controlId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getControl
+      summary: Get a control's detail
+      responses:
+        '200':
+          description: control detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Control' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: updateControl
+      summary: Edit a control's fields, team/scope/auditor assignment (Compliance Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControlInput' }
+      responses:
+        '200':
+          description: control updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Control' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteControl
+      summary: Archive/delete a control (Compliance Admin only)
+      responses:
+        '204': { description: control archived }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /controls/{controlId}/evidence-submissions:
+    parameters:
+      - name: controlId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listEvidenceSubmissions
+      summary: List evidence submissions and their history for a control
+      responses:
+        '200':
+          description: submissions for the control, most recent first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/EvidenceSubmission' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createEvidenceSubmission
+      summary: Submit (or re-submit) evidence for a control (Team Manager only)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string }
+                images:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: evidence submitted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvidenceSubmission' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /evidence-submissions/{submissionId}:
+    parameters:
+      - name: submissionId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getEvidenceSubmission
+      summary: Get an evidence submission's detail, including image references
+      responses:
+        '200':
+          description: submission detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvidenceSubmission' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /evidence-submissions/{submissionId}/images/{imageId}:
+    parameters:
+      - name: submissionId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: imageId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getEvidenceImage
+      summary: Get a short-lived download URL for an evidence image
+      responses:
+        '200':
+          description: presigned download URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /evidence-submissions/{submissionId}/review:
+    parameters:
+      - name: submissionId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: reviewEvidenceSubmission
+      summary: Approve or reject an evidence submission (assigned Auditor only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewDecisionInput' }
+      responses:
+        '201':
+          description: review decision recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewDecision' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /controls/{controlId}/audit-trail:
+    parameters:
+      - name: controlId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listAuditTrail
+      summary: List audit-trail entries for a control (Compliance Admin only)
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: audit-trail entries, most recent first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer }
+                  next: { type: string, nullable: true }
+                  previous: { type: string, nullable: true }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditTrailEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    XUserId:
+      name: X-User-Id
+      in: header
+      required: true
+      description: Injected by the platform gateway from the caller's JWT sub claim; not set by clients.
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: invalid request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: missing or invalid caller identity
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: caller's role/assignment does not permit this action
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: integer, description: HTTP or application error code }
+        message: { type: string, description: short human-readable label }
+        description: { type: string, description: detailed explanation }
+        moreInfo: { type: string, description: URI to documentation }
+
+    ControlInput:
+      type: object
+      required: [title, description, frameworkReference, teamId, productSystemId, auditorIds]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        frameworkReference: { type: string, description: 'e.g. "ISO 27001 A.9.2.3"' }
+        teamId: { type: string, description: reference id in org-directory-service }
+        productSystemId: { type: string, description: reference id in asset-registry-service }
+        auditorIds:
+          type: array
+          items: { type: string, description: reference id in org-directory-service }
+
+    Control:
+      allOf:
+        - $ref: '#/components/schemas/ControlInput'
+        - type: object
+          required: [id, status, createdBy, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [not_started, evidence_submitted, approved, rejected] }
+            createdBy: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    EvidenceImage:
+      type: object
+      required: [id, contentType, sizeBytes, originalFilename, uploadedAt]
+      properties:
+        id: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        originalFilename: { type: string }
+        uploadedAt: { type: string, format: date-time }
+
+    EvidenceSubmission:
+      type: object
+      required: [id, controlId, submittedBy, submittedAt, note, status, images]
+      properties:
+        id: { type: string }
+        controlId: { type: string }
+        submittedBy: { type: string }
+        submittedAt: { type: string, format: date-time }
+        note: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        images:
+          type: array
+          items: { $ref: '#/components/schemas/EvidenceImage' }
+
+    ReviewDecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approved, rejected] }
+        comment: { type: string, description: required when decision is rejected }
+
+    ReviewDecision:
+      allOf:
+        - $ref: '#/components/schemas/ReviewDecisionInput'
+        - type: object
+          required: [id, evidenceSubmissionId, reviewerId, decidedAt]
+          properties:
+            id: { type: string }
+            evidenceSubmissionId: { type: string }
+            reviewerId: { type: string }
+            decidedAt: { type: string, format: date-time }
+
+    AuditTrailEntry:
+      type: object
+      required: [id, entityType, entityId, actorId, action, occurredAt]
+      properties:
+        id: { type: string }
+        entityType: { type: string, enum: [control, evidence, review] }
+        entityId: { type: string }
+        actorId: { type: string }
+        action: { type: string }
+        details: { type: string }
+        occurredAt: { type: string, format: date-time }

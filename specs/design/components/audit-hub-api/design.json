@@ -1,0 +1,28 @@
+{
+  "name": "audit-hub-api",
+  "type": "service",
+  "version": "0.1.0",
+  "language": "Go",
+  "buildpack": "docker",
+  "appPath": "audit-hub-api",
+  "entrypoint": "deployment/service",
+  "exposure": "intranet",
+  "description": "Single backend service for the Audit Evidence Hub. Owns controls, evidence submissions, evidence images (S3-backed), review decisions, and the audit trail in an embedded SQLite database. Enforces per-role/per-assignment authorization (Compliance Admin sees everything; Team Manager sees only their team's controls; Auditor sees only controls assigned to them for review). Resolves teams, people, and product/system references from the organization's existing directory and asset-registry services rather than storing copies, sends action-required emails via the organization's notification service, and stores/retrieves evidence images in S3. Does not implement sign-in — the platform gateway validates JWTs issued by the shared user-auth dependency.",
+  "dependencies": [
+    { "kind": "component", "name": "audit-hub-webapp", "description": "The SPA this API serves data to; not called by this service, listed for topology completeness." },
+    { "kind": "platform-resource", "name": "user-auth", "resourceType": "thunder-app", "parameters": { "scopes": "openid profile email" }, "description": "Shared end-user auth dependency; the platform derives exposesAPI.auth: end-user-required on this service from it and the gateway injects X-User-Id." },
+    { "kind": "org-service", "name": "org-directory-service", "description": "Organization's people/teams directory. Used to resolve teams (for control assignment and team-scoped filtering), managers, and auditors (for reviewer assignment) by reference id — no local copy is kept." },
+    { "kind": "org-service", "name": "asset-registry-service", "description": "Organization's product/system registry. Used to resolve the product/system a control is scoped to, by reference id." },
+    { "kind": "org-service", "name": "notification-service", "description": "Organization's email/notification service. Used to send action-required emails: to a Team Manager on new assignment or rejection, to an Auditor on new/re-submitted evidence." },
+    { "kind": "external", "name": "evidence-storage", "description": "S3 bucket storing uploaded evidence images; the API uploads via PutObject on submission and reads back via GetObject/presigned URL on view. Only the object key and metadata are persisted in the database.",
+      "config": [
+        { "key": "AWS_ACCESS_KEY_ID", "secret": true, "description": "S3 access key id" },
+        { "key": "AWS_SECRET_ACCESS_KEY", "secret": true, "description": "S3 secret access key" },
+        { "key": "AWS_S3_BUCKET_NAME", "description": "Bucket that stores evidence images" },
+        { "key": "AWS_REGION", "defaultValue": "us-east-1", "description": "S3 region" }
+      ]
+    }
+  ],
+  "skillsApplied": ["go", "openapi-conventions", "api-management", "internal-services", "object-storage", "thunder-authentication"],
+  "componentAgentInstructions": "Go service on port 9090 with GET /health (exempt from auth). Use modernc.org/sqlite (driver name \"sqlite\", DB at /data/audit-hub.db) for controls, evidence submissions, evidence images (S3 object key + metadata only, never bytes), review decisions, and audit-trail rows. No /auth/* endpoints. The API Platform gateway validates the JWT (from the shared user-auth dependency) and injects X-User-Id (from JWT sub claim) on every request; read X-User-Id to identify the caller, reject 401 when missing, and resolve the caller's role/team/auditor assignments via org-directory-service. Do NOT validate JWTs yourself; do NOT add CORS middleware (the gateway handles CORS). Every read/write of controls, evidence, and reviews MUST be filtered per the caller's role: Compliance Admin unrestricted; Team Manager restricted to controls whose teamId matches a team they manage (per org-directory-service); Auditor restricted to controls whose auditorIds include the caller. Upstream org-directory-service, asset-registry-service, notification-service: call via env var <NAME_UPPER_SNAKE>_URL, discover their real contract before coding against them — never guess endpoint paths or payload shapes. Evidence images: use the AWS SDK for Go against evidence-storage (env AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_S3_BUCKET_NAME/AWS_REGION), key objects as evidence/<controlId>/<submissionId>/<uuid>-<filename>, store only the key+contentType+size in SQLite. Send emails through notification-service, never a local SMTP client."
+}

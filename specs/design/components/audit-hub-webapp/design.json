@@ -1,0 +1,17 @@
+{
+  "name": "audit-hub-webapp",
+  "type": "web-application",
+  "version": "0.1.0",
+  "language": "TypeScript",
+  "buildpack": "docker",
+  "appPath": "audit-hub-webapp",
+  "entrypoint": "deployment/web-application",
+  "exposure": "internet",
+  "description": "Single-page React app for the Audit Evidence Hub. One codebase whose navigation and screens adapt to the signed-in user's role — Compliance Admin (control authoring, assignment, full visibility), Team Manager (their team's controls, evidence submission with image upload), Auditor (assigned-to-them review queue, approve/reject). Talks only to audit-hub-api for data; signs users in via the shared user-auth OIDC dependency.",
+  "dependencies": [
+    { "kind": "component", "name": "audit-hub-api", "description": "Backend for all control, evidence, and review data; called with the caller's bearer token." },
+    { "kind": "platform-resource", "name": "user-auth", "resourceType": "thunder-app", "parameters": { "scopes": "openid profile email" }, "description": "End-user sign-in for all three roles via the organization's identity provider; role is read from the id_token's groups claim." }
+  ],
+  "skillsApplied": ["react-webapp", "thunder-authentication", "excalidraw-wireframes"],
+  "componentAgentInstructions": "OIDC Authorization Code + PKCE against the platform IDP using oidc-client-ts. Read OIDC config from window._env_.USER_AUTH_* and the API URL from window._env_.AUDIT_HUB_API_URL — typed via src/env.ts, throw on any missing key. Compute redirect_uri = window.location.origin + import.meta.env.BASE_URL + 'callback' and serve the callback route under that base subpath. Attach Authorization: Bearer <access_token> to every audit-hub-api call. Read the caller's role from user.profile.groups (Compliance Admin / Team Manager / Auditor) and render the matching shell/navigation; do not hardcode role logic beyond that claim. DO NOT write a .env file or read import.meta.env.VITE_*. DO NOT use envsubst, /etc/nginx/templates/, or a custom nginx entrypoint — stock nginx:alpine serves the static bundle + env-config.js. Set vite.config.ts base to the deploy subpath and index.html's env-config.js script tag to a relative ./env-config.js path."
+}
